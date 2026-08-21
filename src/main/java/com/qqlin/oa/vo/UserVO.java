@@ -1,23 +1,37 @@
-package com.qqlin.oa.entity;
-
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+package com.qqlin.oa.vo;
 
 import java.time.LocalDateTime;
-@TableName("sys_user")
-public class User {
-    @TableId(type = IdType.AUTO)
-    private Long id;
 
+public class UserVO {
+    private Long id;
     private String username;
-    private String password;
-    private String name;
+
     private String phone;
+    private String name;
     private Long departmentId;
-    private Integer status;
+    private int status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    public int getStatus() {
+        return status;
+    }
+
+    public void setStatus(int status) {
+        this.status = status;
+    }
+
+    public Long getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(Long departmentId) {
+        this.departmentId = departmentId;
+    }
+
+
+
+
 
     public Long getId() {
         return id;
@@ -35,21 +49,7 @@ public class User {
         this.username = username;
     }
 
-    public String getPassword() {
-        return password;
-    }
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
 
     public String getPhone() {
         return phone;
@@ -59,20 +59,12 @@ public class User {
         this.phone = phone;
     }
 
-    public Long getDepartmentId() {
-        return departmentId;
+    public String getName() {
+        return name;
     }
 
-    public void setDepartmentId(Long departmentId) {
-        this.departmentId = departmentId;
-    }
-
-    public Integer getStatus() {
-        return status;
-    }
-
-    public void setStatus(Integer status) {
-        this.status = status;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public LocalDateTime getCreateTime() {
