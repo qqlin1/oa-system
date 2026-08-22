@@ -1,8 +1,6 @@
 package com.qqlin.oa.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 
 import java.time.LocalDateTime;
 @TableName("sys_user")
@@ -16,7 +14,9 @@ public class User {
     private String phone;
     private Long departmentId;
     private Integer status;
+    @TableField(fill= FieldFill.INSERT)
     private LocalDateTime createTime;
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 
     public Long getId() {
@@ -27,7 +27,7 @@ public class User {
         this.id = id;
     }
 
-    public String getUsername() {
+    public  String getUsername() {
         return username;
     }
 
