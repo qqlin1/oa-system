@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 @SpringBootTest
 public class UserMapperTest {
 
@@ -17,8 +20,8 @@ public class UserMapperTest {
 
         User user = userMapper.selectById(1L);
 
-        System.out.println(user.getId());
-        System.out.println(user.getUsername());
-        System.out.println(user.getName());
+        assertNotNull(user);
+        assertEquals(1L, user.getId());
+        assertEquals("zhangsan", user.getUsername());
     }
 }

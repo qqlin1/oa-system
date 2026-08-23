@@ -2,10 +2,13 @@ package com.qqlin.oa.controller;
 
 import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.UserCreateDTO;
+import com.qqlin.oa.dto.UserQueryDTO;
 import com.qqlin.oa.dto.UserStatusUpdateDTO;
 import com.qqlin.oa.vo.UserVO;
 import com.qqlin.oa.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.web.bind.annotation.*;
 import com.qqlin.oa.common.Result;
@@ -36,7 +39,17 @@ public class UserController {
         return Result.success();
     }
     @GetMapping()
-    public Result<PageResult<UserVO>> getUserList(@RequestParam(defaultValue = "1") long current, @RequestParam (defaultValue = "10")long size){
-        return Result.success(userService.listUsers(current,size));
+    public Result<PageResult<UserVO>> getUserList(
+            @RequestParam(defaultValue = "1")
+            @Min(value = 1,message = "页数必须大于等于1")
+            long current,
+
+            @RequestParam (defaultValue = "10")
+            @Min(value = 1, message = "每页条数必须大于等于1")
+            @Max(value = 100,message = "每页条数不能超过100")
+            long size, @Valid @ModelAttribute UserQueryDTO query
+            ){
+        return Result.success(userService.listUsers(current,size,query));
     }
+
 }
