@@ -55,4 +55,9 @@ public class GlobalExceptionHandler {
         public Result<Void> handleUnauthoriezd(UnauthorizedException e){
             return Result.fail(HttpStatus.UNAUTHORIZED.value(), e.getMessage());
         }
+        @ExceptionHandler(ForbiddenException.class)
+        @ResponseStatus(HttpStatus.FORBIDDEN)
+        public Result<Void>  handleForbidden(ForbiddenException e){
+            return Result.fail(HttpStatus.FORBIDDEN.value(), e.getMessage());
+        }
 }

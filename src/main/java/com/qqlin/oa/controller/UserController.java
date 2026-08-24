@@ -51,5 +51,9 @@ public class UserController {
             ){
         return Result.success(userService.listUsers(current,size,query));
     }
+    @GetMapping("/me")
+    public Result<UserVO> getCurrentUser(@RequestAttribute Long currentUserId){
+        return  Result.success(userService.getById(currentUserId));
+    }
 
 }

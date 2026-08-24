@@ -10,6 +10,8 @@ import com.qqlin.oa.dto.UserQueryDTO;
 import com.qqlin.oa.exception.UnauthorizedException;
 import com.qqlin.oa.exception.UserNotFoundException;
 import com.qqlin.oa.exception.UsernameAlreadyExistsException;
+import com.qqlin.oa.security.JwtTokenService;
+import com.qqlin.oa.vo.LoginVO;
 import com.qqlin.oa.vo.UserVO;
 import com.qqlin.oa.entity.User;
 import com.qqlin.oa.mapper.UserMapper;
@@ -25,10 +27,13 @@ public class UserService {
 
     private final UserMapper userMapper;
 
-    public UserService(UserMapper userMapper,PasswordEncoder passwordEncoder) {
+    private final JwtTokenService jwtTokenService;
+
+    public UserService(UserMapper userMapper,PasswordEncoder passwordEncoder,JwtTokenService jwtTokenService) {
 
         this.userMapper = userMapper;
         this.passwordEncoder=passwordEncoder;
+        this.jwtTokenService=jwtTokenService;
     }
 
     public UserVO getById(Long id){
@@ -93,7 +98,7 @@ public class UserService {
         userVO.setUpdateTime(user.getUpdateTime());
         return userVO;
     }
-    public UserVO login(UserLoginDTO dto){
+    public LoginVO login(UserLoginDTO dto){
         User user=userMapper.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getUsername,dto.getUsername())
         );
@@ -105,9 +110,14 @@ public class UserService {
             throw new UnauthorizedException("用户名或密码错误");
         }
         if(!Integer.valueOf(1).equals(user.getStatus())){
-            throw new UnauthorizedException("用户未认证");
+            throw new UnauthorizedException("用户被禁用");
         }
-        return  toUserVO(user);
+        String token=jwtTokenService.generateToken(
+                user.getId(), user.getUsername()
+        );
+        LoginVO loginVO=new LoginVO();
+        loginVO.setToken(token);
+        loginVO.setUser(toUserVO(user));
+        return  loginVO;
     }
-
 }

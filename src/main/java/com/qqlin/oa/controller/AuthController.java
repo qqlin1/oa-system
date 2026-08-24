@@ -3,6 +3,7 @@ package com.qqlin.oa.controller;
 import com.qqlin.oa.common.Result;
 import com.qqlin.oa.dto.UserLoginDTO;
 import com.qqlin.oa.service.UserService;
+import com.qqlin.oa.vo.LoginVO;
 import com.qqlin.oa.vo.UserVO;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +20,7 @@ public class AuthController {
         this.userService = userService;
     }
     @PostMapping("/login")
-    public Result<UserVO> login(@Valid @RequestBody UserLoginDTO dto){
+    public Result<LoginVO> login(@Valid @RequestBody UserLoginDTO dto){
         return Result.success(userService.login(dto));
     }
 }
