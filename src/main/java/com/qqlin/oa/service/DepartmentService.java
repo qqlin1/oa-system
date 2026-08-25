@@ -5,16 +5,19 @@ import com.qqlin.oa.common.Result;
 import com.qqlin.oa.dto.DepartmentCreateDTO;
 import com.qqlin.oa.entity.Department;
 import com.qqlin.oa.entity.User;
+import com.qqlin.oa.exception.DepartmentAlreadyExistsException;
 import com.qqlin.oa.exception.DepartmentNotFoundException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.UserMapper;
 import com.qqlin.oa.vo.DepartmentVO;
+import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
+@Service
 public class DepartmentService {
-    private DepartmentMapper departmentMapper;
-    private UserService userService;
+    private final DepartmentMapper departmentMapper;
+    private final UserService userService;
     public DepartmentService(DepartmentMapper departmentMapper, UserService userService) {
         this.departmentMapper=departmentMapper;
         this.userService=userService;
@@ -26,14 +29,14 @@ public class DepartmentService {
         String departmentName= dto.getName().trim();
         Long count=departmentMapper.selectCount(
                 new LambdaQueryWrapper<Department>().eq(
-                        Department::getName,dto.getName()
-                ).eq(Department::getLeaderId,
-                        dto.getLeaderId())
+                        Department::getParentId,dto.getParentId()
+                ).eq(Department::getName,
+                        dto.getName())
         );
         if(count>0){
-            throw new DepartmentNotFoundException("同一上级部门下已存在同名部门");
+            throw new DepartmentAlreadyExistsException("同一上级部门下已存在同名部门");
         }
-        DepartmentVO departmentVO = new DepartmentVO();
+
 
         Department department = new Department();
         department.setName(departmentName);

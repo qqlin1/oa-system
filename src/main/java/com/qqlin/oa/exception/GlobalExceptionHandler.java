@@ -68,6 +68,6 @@ public class GlobalExceptionHandler {
         @ExceptionHandler(DepartmentAlreadyExistsException.class)
         @ResponseStatus(HttpStatus.CONFLICT)
         public Result<Void> handlerDepartmentAlreadyExists(DepartmentAlreadyExistsException e){
-            return Result.fail(HttpStatus.NO_CONTENT.value(), e.getMessage());
+            return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
         }
 }
