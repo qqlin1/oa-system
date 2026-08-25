@@ -6,10 +6,7 @@ import com.qqlin.oa.service.UserService;
 import com.qqlin.oa.vo.LoginVO;
 import com.qqlin.oa.vo.UserVO;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -22,5 +19,10 @@ public class AuthController {
     @PostMapping("/login")
     public Result<LoginVO> login(@Valid @RequestBody UserLoginDTO dto){
         return Result.success(userService.login(dto));
+    }
+    @PostMapping("/logout")
+    public Result<Void> logout(@RequestAttribute("currentUserId") Long currentUserId){
+        userService.logout(currentUserId);
+        return Result.success();
     }
 }

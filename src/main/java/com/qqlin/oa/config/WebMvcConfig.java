@@ -14,6 +14,6 @@ private final JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
     }
     @Override
     public void addInterceptors(InterceptorRegistry registry){
-        registry.addInterceptor(jwtAuthenticationInterceptor).addPathPatterns("/users/{id}");
+        registry.addInterceptor(jwtAuthenticationInterceptor).addPathPatterns("/auth/logout","/users","/users/**");
     }
 }

@@ -14,6 +14,7 @@ public class JwtTokenService {
     private final SecretKey secretKey;
     private final long expiration;
 
+
     public JwtTokenService(@Value("${jwt.secret}") String secret,
                            @Value("${jwt.expiration}") long expiration) {
         this.secretKey = Keys.hmacShaKeyFor(
@@ -22,10 +23,16 @@ public class JwtTokenService {
         this.expiration = expiration;
     }
     public String generateToken(Long userId,String username){
+        return generateToken(userId,username,0);
+    }
+    public String generateToken(Long userId,
+                                String username,
+                                Integer tokenVersion){
         Date now=new Date();
         Date expireTime=new Date(now.getTime()+expiration);
         return Jwts.builder().subject(String.valueOf(userId))
                 .claim("username",username)
+                .claim("tokenVersion",tokenVersion)
                 .issuedAt(now)
                 .expiration(expireTime)
                 .signWith(secretKey)

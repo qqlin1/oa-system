@@ -7,6 +7,7 @@ import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.UserCreateDTO;
 import com.qqlin.oa.dto.UserLoginDTO;
 import com.qqlin.oa.dto.UserQueryDTO;
+import com.qqlin.oa.exception.ForbiddenException;
 import com.qqlin.oa.exception.UnauthorizedException;
 import com.qqlin.oa.exception.UserNotFoundException;
 import com.qqlin.oa.exception.UsernameAlreadyExistsException;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class UserService {
@@ -37,6 +39,7 @@ public class UserService {
     }
 
     public UserVO getById(Long id){
+
         User user=userMapper.selectById(id);
         if(user==null){
             throw new UserNotFoundException("用户不存在");
@@ -44,7 +47,8 @@ public class UserService {
 
         return toUserVO(user);
     }
-    public PageResult<UserVO> listUsers(long current, long size, UserQueryDTO query){
+    public PageResult<UserVO> listUsers(Long currentUserId,long current, long size, UserQueryDTO query){
+        requireAdmin(currentUserId);
         Page<User> page= new Page<>(current,size);
         LambdaQueryWrapper<User> wrapper=new LambdaQueryWrapper<>();
         boolean hasUsername=query.getUsername()!=null&&!query.getUsername().isBlank();
@@ -59,7 +63,8 @@ public class UserService {
         }
         return new PageResult<>(userVOList,userPage.getTotal(),userPage.getCurrent(),userPage.getSize());
     }
-    public UserVO createUser(UserCreateDTO dto){
+    public UserVO createUser(Long currentUserId,UserCreateDTO dto){
+        requireAdmin(currentUserId);
         Long count=userMapper.selectCount(
                 new LambdaQueryWrapper<User>().eq(User::getUsername,dto.getUsername())
         );
@@ -74,10 +79,12 @@ public class UserService {
         user.setPhone(dto.getPhone());
         user.setDepartmentId(dto.getDepartmentId());
         user.setStatus(1);
+        user.setRole("USER");
         userMapper.insert(user);
         return toUserVO(user);
     }
-    public void updateStatus(Long id,Integer status){
+    public void updateStatus(Long currentUserId,Long id,Integer status){
+        requireAdmin(currentUserId);
         User user =new User();
         user.setId(id);
         user.setStatus(status);
@@ -94,6 +101,7 @@ public class UserService {
         userVO.setPhone(user.getPhone());
         userVO.setDepartmentId(user.getDepartmentId());
         userVO.setStatus(user.getStatus());
+        userVO.setRole(user.getRole());
         userVO.setCreateTime(user.getCreateTime());
         userVO.setUpdateTime(user.getUpdateTime());
         return userVO;
@@ -113,11 +121,55 @@ public class UserService {
             throw new UnauthorizedException("用户被禁用");
         }
         String token=jwtTokenService.generateToken(
-                user.getId(), user.getUsername()
+                user.getId(),
+                user.getUsername(),
+                user.getTokenVersion()
         );
         LoginVO loginVO=new LoginVO();
         loginVO.setToken(token);
         loginVO.setUser(toUserVO(user));
         return  loginVO;
     }
+    public UserVO getByIdForCurrentUser(Long  targetId,Long currentId){
+        User user=getCurrentActiveUser(currentId);
+        boolean isAdmin="ADMIN".equals(user.getRole());
+        boolean isSelf=currentId.equals(targetId);
+        if(!isSelf && !isAdmin){
+            throw new ForbiddenException("无权查看其他用户信息");
+        }
+
+        return getById(targetId);
+    }
+    public void ensureCurrentUserActive(Long currentUserid,Integer tokenVersion){
+        User currentUser=getCurrentActiveUser(currentUserid);
+        if(!Objects.equals(currentUser.getTokenVersion(),tokenVersion)){
+            throw new UnauthorizedException("登录状态已失效");
+        }
+    }
+    public void logout(Long currentUserId){
+        User user=getCurrentActiveUser(currentUserId);
+        User updateUser=new User();
+        updateUser.setId(user.getId());
+        updateUser.setTokenVersion(user.getTokenVersion()+1);
+        int affectedRows=userMapper.updateById(updateUser);
+        if(affectedRows==0){
+            throw new UnauthorizedException("登录已失效");
+        }
+    }
+
+    private User getCurrentActiveUser(Long currentUserId){
+        User currentUser=userMapper.selectById(currentUserId);
+        if (currentUser==null||!Integer.valueOf(1).equals(currentUser.getStatus())){
+            throw new UnauthorizedException("登陆状态已失效");
+        }
+        return currentUser;
+    }
+    public void requireAdmin(Long currentUserId) {
+        User currentUser = getCurrentActiveUser(currentUserId);
+
+        if (!"ADMIN".equals(currentUser.getRole())) {
+            throw new ForbiddenException("需要管理员权限");
+        }
+    }
+
 }

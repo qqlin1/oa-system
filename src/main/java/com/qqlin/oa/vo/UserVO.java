@@ -10,6 +10,7 @@ public class UserVO {
     private String name;
     private Long departmentId;
     private int status;
+    private String role;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -28,10 +29,6 @@ public class UserVO {
     public void setDepartmentId(Long departmentId) {
         this.departmentId = departmentId;
     }
-
-
-
-
 
     public Long getId() {
         return id;
@@ -81,5 +78,13 @@ public class UserVO {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 }

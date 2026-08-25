@@ -23,23 +23,28 @@ public class UserController {
         this.userService = userService;
     }
     @PostMapping()
-    public Result<UserVO> createUser(@Valid @RequestBody UserCreateDTO dto){
+    public Result<UserVO> createUser(
+            @RequestAttribute("currentUserId") Long currentUserId,
+            @Valid @RequestBody UserCreateDTO dto){
 
-        return Result.success(userService.createUser(dto));
+        return Result.success(userService.createUser(currentUserId,dto));
     }
 
 
     @GetMapping("/{id}")
-    public Result<UserVO> getById(@PathVariable Long id) {
-        return Result.success(userService.getById(id));
+    public Result<UserVO> getById(@PathVariable("id") Long targetId,
+                                  @RequestAttribute("currentUserId") Long currentUserId) {
+
+        return Result.success(userService.getByIdForCurrentUser(targetId, currentUserId));
     }
     @PatchMapping("{id}/status")
-    public Result<Void> updateStatus(@PathVariable Long id, @Valid @RequestBody UserStatusUpdateDTO dto){
-        userService.updateStatus(id,dto.getStatus());
+    public Result<Void> updateStatus(@RequestAttribute("currentUserId") Long currentUserId,@PathVariable("id") Long id, @Valid @RequestBody UserStatusUpdateDTO dto){
+        userService.updateStatus(currentUserId,id,dto.getStatus());
         return Result.success();
     }
     @GetMapping()
     public Result<PageResult<UserVO>> getUserList(
+            @RequestAttribute("currentUserId") Long currentUserId,
             @RequestParam(defaultValue = "1")
             @Min(value = 1,message = "页数必须大于等于1")
             long current,
@@ -49,10 +54,10 @@ public class UserController {
             @Max(value = 100,message = "每页条数不能超过100")
             long size, @Valid @ModelAttribute UserQueryDTO query
             ){
-        return Result.success(userService.listUsers(current,size,query));
+        return Result.success(userService.listUsers(currentUserId,current,size,query));
     }
     @GetMapping("/me")
-    public Result<UserVO> getCurrentUser(@RequestAttribute Long currentUserId){
+    public Result<UserVO> getCurrentUser(@RequestAttribute("currentUserId") Long currentUserId){
         return  Result.success(userService.getById(currentUserId));
     }
 
