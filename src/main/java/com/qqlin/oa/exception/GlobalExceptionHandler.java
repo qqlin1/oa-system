@@ -70,4 +70,15 @@ public class GlobalExceptionHandler {
         public Result<Void> handlerDepartmentAlreadyExists(DepartmentAlreadyExistsException e){
             return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
         }
+        @ExceptionHandler(InvalidDepartmentHierarchyException.class)
+        @ResponseStatus(HttpStatus.CONFLICT)
+        public  Result<Void> hanlderInvalidDepartmentHierarchy(InvalidDepartmentHierarchyException e){
+            return Result.fail(HttpStatus.CONFLICT.value(),e.getMessage());
+        }
+        @ExceptionHandler(DepartmentInUseException.class)
+        @ResponseStatus(HttpStatus.CONFLICT)
+        public Result<Void> hanlderDepartmentInUse(DepartmentInUseException e){
+            return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
+        }
+
 }

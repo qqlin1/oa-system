@@ -1,23 +1,24 @@
-package com.qqlin.oa.dto;
+package com.qqlin.oa.vo;
 
-import jakarta.validation.constraints.*;
+import java.util.ArrayList;
+import java.util.List;
 
-public class DepartmentCreateDTO {
-    @NotBlank(message = "部门名称不能为空")
-    @Size(max=50,message = "部门名称不能超过50个字符")
+public class DepartmentTreeVO {
+    private Long id;
     private String name;
-
-    @NotNull(message = "上级部门ID不能为空")
-    @PositiveOrZero(message = "上级部门ID不能小于0")
     private Long parentId;
-
-    @Positive(message = "负责人ID必须大于0")
     private Long leaderId;
-
-    @NotNull(message = "排序值不能为空")
-    @PositiveOrZero(message = "排序值不能小于0")
-    @Max(value = 9999,message = "排序值不能超过9999")
     private Integer sort;
+    private Integer status;
+    private List<DepartmentTreeVO> children=new ArrayList<>();
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
 
     public String getName() {
         return name;
@@ -26,7 +27,6 @@ public class DepartmentCreateDTO {
     public void setName(String name) {
         this.name = name;
     }
-
 
     public Long getParentId() {
         return parentId;
@@ -50,5 +50,21 @@ public class DepartmentCreateDTO {
 
     public void setSort(Integer sort) {
         this.sort = sort;
+    }
+
+    public Integer getStatus() {
+        return status;
+    }
+
+    public void setStatus(Integer status) {
+        this.status = status;
+    }
+
+    public List<DepartmentTreeVO> getChildren() {
+        return children;
+    }
+
+    public void setChildren(List<DepartmentTreeVO> children) {
+        this.children = children;
     }
 }

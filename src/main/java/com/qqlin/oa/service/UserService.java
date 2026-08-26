@@ -1,12 +1,13 @@
 package com.qqlin.oa.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.Query;
+
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.UserCreateDTO;
 import com.qqlin.oa.dto.UserLoginDTO;
 import com.qqlin.oa.dto.UserQueryDTO;
+
 import com.qqlin.oa.exception.ForbiddenException;
 import com.qqlin.oa.exception.UnauthorizedException;
 import com.qqlin.oa.exception.UserNotFoundException;
@@ -171,5 +172,16 @@ public class UserService {
             throw new ForbiddenException("需要管理员权限");
         }
     }
+    public boolean hasUsersInDepartment(Long departmentId){
+        Long count=userMapper.selectCount(
+                new LambdaQueryWrapper<User>().eq(
+                        User::getDepartmentId,
+                        departmentId
+                )
+        );
+        return count>0;
+
+    }
 
 }
+
