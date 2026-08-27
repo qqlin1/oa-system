@@ -19,6 +19,8 @@ private final JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
                 "/users",
                 "/users/**",
                 "/departments",
-                "/departments/**");
+                "/departments/**",
+                "/leaves",
+                "/leaves/**");
     }
 }

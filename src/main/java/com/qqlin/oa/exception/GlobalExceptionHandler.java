@@ -72,13 +72,28 @@ public class GlobalExceptionHandler {
         }
         @ExceptionHandler(InvalidDepartmentHierarchyException.class)
         @ResponseStatus(HttpStatus.CONFLICT)
-        public  Result<Void> hanlderInvalidDepartmentHierarchy(InvalidDepartmentHierarchyException e){
+        public  Result<Void> handlerInvalidDepartmentHierarchy(InvalidDepartmentHierarchyException e){
             return Result.fail(HttpStatus.CONFLICT.value(),e.getMessage());
         }
         @ExceptionHandler(DepartmentInUseException.class)
         @ResponseStatus(HttpStatus.CONFLICT)
-        public Result<Void> hanlderDepartmentInUse(DepartmentInUseException e){
+        public Result<Void> handlerDepartmentInUse(DepartmentInUseException e){
             return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
+        }
+        @ExceptionHandler(InvalidLeaveRequestException.class)
+        @ResponseStatus(HttpStatus.BAD_REQUEST)
+        public Result<Void> handlerInvalidLeaveRequest(InvalidLeaveRequestException e){
+            return Result.fail(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+        @ExceptionHandler(InvalidLeaveStatusException.class)
+        @ResponseStatus(HttpStatus.CONFLICT)
+        public Result<Void> handlerInvalidLeaveStatus(InvalidLeaveStatusException e){
+            return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
+        }
+        @ExceptionHandler(LeaveNotFoundException.class)
+        @ResponseStatus(HttpStatus.NOT_FOUND)
+        public Result<Void> handlerLeaveNotFound(LeaveNotFoundException e){
+            return Result.fail(HttpStatus.NOT_FOUND.value(), e.getMessage());
         }
 
 }
