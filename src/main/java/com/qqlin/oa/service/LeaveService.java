@@ -142,6 +142,42 @@ public class LeaveService {
     }
     public void cancelLeave(Long currentUserId,
                             long leaveId){
-        
+        LeaveRequest currentLeave=leaveRequestMapper.selectById(leaveId);
+        if(currentLeave==null){
+            throw new LeaveNotFoundException("请假申请不存在");
+        }
+        if(!Objects.equals(currentUserId,currentLeave.getApplicantId())){
+            throw new ForbiddenException("只能撤销自己提交的请假申请");
+        }
+        if(currentLeave.getStatus()!=LeaveStatus.PENDING){
+            throw new InvalidLeaveStatusException("只有待审批的请假申请才能撤销");
+        }
+        LeaveRequest updateLeave=new LeaveRequest();
+        updateLeave.setStatus(LeaveStatus.CANCELED);
+        LambdaUpdateWrapper<LeaveRequest> wrapper=new LambdaUpdateWrapper<>();
+        wrapper.eq(LeaveRequest::getId,leaveId);
+        wrapper.eq(LeaveRequest::getApplicantId,currentUserId);
+        wrapper.eq(LeaveRequest::getStatus,LeaveStatus.PENDING);
+        int affectedRows =leaveRequestMapper.update(updateLeave,wrapper);
+        if(affectedRows==0){
+            throw new InvalidLeaveStatusException("请假申请状态已经发生变化，请刷新后重试");
+        }
+    }
+    public PageResult<LeaveVO> getPendingLeaveList(Long currentUserId,
+                                                        long current,
+                                                        long size){
+        userService.requireAdmin(currentUserId);
+        Page<LeaveRequest> leavePage=new Page<>(current,size);
+        LambdaQueryWrapper<LeaveRequest> wrapper=new LambdaQueryWrapper<>();
+        wrapper.eq(LeaveRequest::getStatus,LeaveStatus.PENDING);
+        wrapper.orderByDesc(LeaveRequest::getCreateTime);
+        wrapper.orderByDesc(LeaveRequest::getId);
+        leaveRequestMapper.selectPage(leavePage,wrapper);
+        List<LeaveVO> leaveVOList=new ArrayList<>();
+        for (LeaveRequest leaveRequest:leavePage.getRecords()){
+
+            leaveVOList.add(toLeaveVO(leaveRequest));
+        }
+        return new PageResult<>(leaveVOList,leavePage.getTotal(),leavePage.getCurrent(),leavePage.getSize());
     }
 }

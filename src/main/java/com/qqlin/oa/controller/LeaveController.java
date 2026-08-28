@@ -39,4 +39,22 @@ public class LeaveController {
         leaveService.approveLeave(currentUserId,id,dto);
         return  Result.success();
     }
+    @PatchMapping("/{id}/cancel")
+    public Result<Void> cancelLeave(@RequestAttribute("currentUserId") Long currentUserId,
+                                    @PathVariable("id")long id){
+        leaveService.cancelLeave(currentUserId,id);
+        return Result.success();
+    }
+    @GetMapping("/pending")
+    public Result<PageResult<LeaveVO>> getPendingLeaveList(@RequestAttribute("currentUserId") Long currentUserId,
+                                                           @RequestParam(defaultValue = "1")
+                                                           @Min(value = 1,message = "当前页数不能小于1") long current,
+                                                           @RequestParam(defaultValue = "10")
+                                                               @Min(
+                                                                       value = 1,
+                                                                       message = "每页条数必须大于等于1"
+                                                               )
+                                                           @Max(value = 100,message = "每页条数不能超过100")long size){
+        return Result.success(leaveService.getPendingLeaveList(currentUserId, current, size));
+    }
 }

@@ -1,0 +1,650 @@
+{
+  "info": {
+    "_postman_id": "54e47620-1afd-4a03-b4d4-a4b92504cba4",
+    "name": "OA System - 请假模块集中验收",
+    "description": "使用顺序：先在 Collection Variables 中填写 userPassword 和 adminPassword，然后从上到下运行。普通用户和管理员登录成功后会自动保存 Token；创建请假成功后会自动保存对应的请假 ID。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "userUsername",
+      "value": "login_test"
+    },
+    {
+      "key": "userPassword",
+      "value": ""
+    },
+    {
+      "key": "adminUsername",
+      "value": "login_test1"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "cancelLeaveId",
+      "value": ""
+    },
+    {
+      "key": "approvalLeaveId",
+      "value": ""
+    },
+    {
+      "key": "leaveStartTime",
+      "value": ""
+    },
+    {
+      "key": "leaveEndTime",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - 未登录访问我的请假应返回 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('未登录返回 HTTP 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test('业务响应 code 为 401', function () {",
+              "    pm.expect(pm.response.json().code).to.eql(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/leaves/me?current=1&size=10"
+      },
+      "response": []
+    },
+    {
+      "name": "01 - 登录并自动保存 Token",
+      "item": [
+        {
+          "name": "普通用户登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('普通用户登录成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.code).to.eql(200);",
+                  "    pm.expect(body.data.token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.token) {",
+                  "    pm.collectionVariables.set('userToken', body.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "response": []
+        },
+        {
+          "name": "管理员登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('管理员登录成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.code).to.eql(200);",
+                  "    pm.expect(body.data.token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.token) {",
+                  "    pm.collectionVariables.set('adminToken', body.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - 员工撤销流程",
+      "item": [
+        {
+          "name": "创建用于撤销的请假",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = new Date(Date.now() + 24 * 60 * 60 * 1000);",
+                  "const end = new Date(start.getTime() + 8 * 60 * 60 * 1000);",
+                  "pm.collectionVariables.set('leaveStartTime', start.toISOString().slice(0, 19));",
+                  "pm.collectionVariables.set('leaveEndTime', end.toISOString().slice(0, 19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('请假创建成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().data).to.exist;",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.data !== null && body.data !== undefined) {",
+                  "    pm.collectionVariables.set('cancelLeaveId', String(body.data));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaveType\": \"ANNUAL\",\n  \"startTime\": \"{{leaveStartTime}}\",\n  \"endTime\": \"{{leaveEndTime}}\",\n  \"reason\": \"请假撤销流程验收\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/leaves"
+          },
+          "response": []
+        },
+        {
+          "name": "查看我的请假",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('我的请假查询成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().code).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/me?current=1&size=10"
+          },
+          "response": []
+        },
+        {
+          "name": "本人撤销待审批申请",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('首次撤销成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().code).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/{{cancelLeaveId}}/cancel"
+          },
+          "response": []
+        },
+        {
+          "name": "重复撤销应返回 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('重复撤销返回 HTTP 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().code).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/{{cancelLeaveId}}/cancel"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - 管理员审批与权限流程",
+      "item": [
+        {
+          "name": "创建用于审批的请假",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = new Date(Date.now() + 48 * 60 * 60 * 1000);",
+                  "const end = new Date(start.getTime() + 8 * 60 * 60 * 1000);",
+                  "pm.collectionVariables.set('leaveStartTime', start.toISOString().slice(0, 19));",
+                  "pm.collectionVariables.set('leaveEndTime', end.toISOString().slice(0, 19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('请假创建成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().data).to.exist;",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.data !== null && body.data !== undefined) {",
+                  "    pm.collectionVariables.set('approvalLeaveId', String(body.data));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaveType\": \"PERSONAL\",\n  \"startTime\": \"{{leaveStartTime}}\",\n  \"endTime\": \"{{leaveEndTime}}\",\n  \"reason\": \"请假审批流程验收\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/leaves"
+          },
+          "response": []
+        },
+        {
+          "name": "管理员查看待审批列表",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('管理员查询待审批列表成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().code).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/pending?current=1&size=10"
+          },
+          "response": []
+        },
+        {
+          "name": "普通用户查看待审批列表应返回 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('普通用户查询待审批列表返回 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().code).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/pending?current=1&size=10"
+          },
+          "response": []
+        },
+        {
+          "name": "普通用户审批应返回 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('普通用户审批返回 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().code).to.eql(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"approvalComment\": \"普通用户不应有审批权限\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/leaves/{{approvalLeaveId}}/approval"
+          },
+          "response": []
+        },
+        {
+          "name": "管理员批准待审批申请",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('管理员审批成功', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().code).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"approvalComment\": \"同意本次请假\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/leaves/{{approvalLeaveId}}/approval"
+          },
+          "response": []
+        },
+        {
+          "name": "重复审批应返回 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('重复审批返回 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().code).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECTED\",\n  \"approvalComment\": \"尝试重复审批\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/leaves/{{approvalLeaveId}}/approval"
+          },
+          "response": []
+        },
+        {
+          "name": "员工撤销已审批申请应返回 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('撤销已审批申请返回 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().code).to.eql(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/leaves/{{approvalLeaveId}}/cancel"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
