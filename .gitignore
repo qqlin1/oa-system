@@ -34,3 +34,6 @@ build/
 
 ### Local secrets ###
 src/main/resources/application-local.properties
+
+### WorkBuddy 工作数据（计划、记忆、临时产物，不进版本库）###
+.workbuddy-ai/
