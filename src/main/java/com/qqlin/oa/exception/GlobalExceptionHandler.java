@@ -95,5 +95,20 @@ public class GlobalExceptionHandler {
         public Result<Void> handlerLeaveNotFound(LeaveNotFoundException e){
             return Result.fail(HttpStatus.NOT_FOUND.value(), e.getMessage());
         }
+        @ExceptionHandler(InvalidBookingRequestException.class)
+        @ResponseStatus(HttpStatus.BAD_REQUEST)
+        public Result<Void> handlerInvalidBookingRequest(InvalidBookingRequestException e){
+            return Result.fail(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+        @ExceptionHandler(MeetingRoomNotFoundException.class)
+        @ResponseStatus(HttpStatus.NOT_FOUND)
+        public Result<Void> handlerMeetingRoomNotFound(MeetingRoomNotFoundException e){
+            return Result.fail(HttpStatus.NOT_FOUND.value(), e.getMessage());
+        }
+        @ExceptionHandler(BookingConflictException.class)
+        @ResponseStatus(HttpStatus.CONFLICT)
+        public Result<Void> handlerBookingConflict(BookingConflictException e){
+            return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
+        }
 
 }

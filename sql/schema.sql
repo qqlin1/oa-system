@@ -76,4 +76,44 @@ CREATE TABLE IF NOT EXISTS sys_leave
   COLLATE = utf8mb4_0900_ai_ci
   COMMENT = '请假申请表';
 
+CREATE TABLE IF NOT EXISTS sys_meeting_room
+(
+    id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '会议室ID',
+    name        VARCHAR(50) NOT NULL COMMENT '会议室名称',
+    capacity    INT         NOT NULL DEFAULT 0 COMMENT '可容纳人数',
+    location    VARCHAR(100)          DEFAULT NULL COMMENT '位置',
+    status      TINYINT     NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+    create_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                      ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_room_name (name)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '会议室表';
+
+
+CREATE TABLE IF NOT EXISTS sys_booking
+(
+    id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '预订记录ID',
+    room_id     BIGINT      NOT NULL COMMENT '会议室ID',
+    user_id     BIGINT      NOT NULL COMMENT '预订人ID',
+    start_time  DATETIME    NOT NULL COMMENT '预订开始时间',
+    end_time    DATETIME    NOT NULL COMMENT '预订结束时间',
+    status      VARCHAR(20) NOT NULL DEFAULT 'BOOKED'
+                                    COMMENT 'BOOKED已预订 / CANCELED已取消',
+    create_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    PRIMARY KEY (id),
+    KEY idx_booking_room_time (room_id, start_time, end_time),
+    KEY idx_booking_user_time (user_id, start_time)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '会议室预订表';
+
 -- End of schema
