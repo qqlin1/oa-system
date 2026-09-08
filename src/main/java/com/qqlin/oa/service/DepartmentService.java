@@ -43,7 +43,8 @@ public class DepartmentService {
                 new LambdaQueryWrapper<Department>().eq(
                         Department::getParentId,dto.getParentId()
                 ).eq(Department::getName,
-                        departmentName));
+                        departmentName)
+        );
         if(count>0){
             throw new DepartmentAlreadyExistsException("同一上级部门下已存在同名部门");
         }
@@ -96,6 +97,7 @@ public class DepartmentService {
         }
         return roots;
     }
+    @Transactional
     public void updateParent(Long currentUserId,
                              Long departmentId,
                              DepartmentParentUpdateDTO dto){
@@ -131,7 +133,7 @@ public class DepartmentService {
     }
     private void validateParentChange(Long departmentId,Long newParentId){
         List<Department> departments=departmentMapper.selectList(
-                new LambdaQueryWrapper<>()
+                new LambdaQueryWrapper<Department>().last("FOR UPDATE")
         );
         Map<Long,Department> departmentMap=new HashMap<>();
         for(Department department:departments){

@@ -116,4 +116,21 @@ CREATE TABLE IF NOT EXISTS sys_booking
   COLLATE = utf8mb4_0900_ai_ci
   COMMENT = '会议室预订表';
 
+CREATE TABLE IF NOT EXISTS sys_idempotent
+(
+    id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    request_id  VARCHAR(64) NOT NULL COMMENT '幂等号，前端提交前申请，重试时复用同一个',
+    biz_type    VARCHAR(32) NOT NULL DEFAULT '' COMMENT '业务类型，如 LEAVE',
+    biz_id      BIGINT               DEFAULT NULL COMMENT '首次处理产生的业务单号',
+    create_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_idempotent_request_id (request_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '幂等表';
+
 -- End of schema

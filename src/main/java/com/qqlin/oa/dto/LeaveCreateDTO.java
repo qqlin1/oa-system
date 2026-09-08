@@ -20,6 +20,7 @@ public class LeaveCreateDTO {
     @NotBlank(message = "请假原因不能为空")
     @Size(max = 500,message = "请假原因不能超过500个字符")
     private String reason;
+    private String requestId;
 
     public String getLeaveType() {
         return leaveType;
@@ -52,4 +53,13 @@ public class LeaveCreateDTO {
     public void setReason(String reason) {
         this.reason = reason;
     }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
 }

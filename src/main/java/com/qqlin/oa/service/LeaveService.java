@@ -6,15 +6,18 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.LeaveApprovalDTO;
 import com.qqlin.oa.dto.LeaveCreateDTO;
+import com.qqlin.oa.entity.Idempotent;
 import com.qqlin.oa.entity.LeaveRequest;
 import com.qqlin.oa.enums.LeaveStatus;
 import com.qqlin.oa.exception.ForbiddenException;
 import com.qqlin.oa.exception.InvalidLeaveRequestException;
 import com.qqlin.oa.exception.InvalidLeaveStatusException;
 import com.qqlin.oa.exception.LeaveNotFoundException;
+import com.qqlin.oa.mapper.IdempotentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.vo.LeaveVO;
 import com.qqlin.oa.vo.UserVO;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,12 +28,53 @@ import java.util.Objects;
 @Service
 public class LeaveService {
     private final LeaveRequestMapper leaveRequestMapper;
+    private final IdempotentMapper idempotentMapper;
     private final UserService userService;
-    public LeaveService(LeaveRequestMapper leaveRequestMapper,UserService userService) {
+    public LeaveService(LeaveRequestMapper leaveRequestMapper,
+                        IdempotentMapper idempotentMapper,
+                        UserService userService) {
         this.leaveRequestMapper = leaveRequestMapper;
+        this.idempotentMapper = idempotentMapper;
         this.userService = userService;
     }
-    public Long createLeave(Long currentUserId,LeaveCreateDTO dto){
+    public Long createLeave(Long currentUserId, LeaveCreateDTO dto) {
+        String requestId = dto.getRequestId();
+
+        // 没带幂等号的老请求，走原逻辑，不受影响
+        if (requestId == null || requestId.isBlank()) {
+            return doCreateLeave(currentUserId, dto);
+        }
+
+        try {
+            // ① 直接插幂等记录，靠唯一索引判断是不是第一次
+            Idempotent record = new Idempotent();
+            record.setRequestId(requestId);
+            record.setBizType("LEAVE");
+            idempotentMapper.insert(record);
+
+        } catch (DuplicateKeyException e) {
+            // ② 撞唯一键 = 这个请求处理过了，直接返回上次的单号
+            Idempotent exist = idempotentMapper.selectOne(
+                    new LambdaQueryWrapper<Idempotent>()
+                            .eq(Idempotent::getRequestId, requestId));
+
+            return exist.getBizId();
+        }
+
+        // ③ 第一次：正常创建请假单
+        Long leaveId = doCreateLeave(currentUserId, dto);
+
+        // ④ 把单号回填到幂等记录，下次重复请求才能拿到它
+        Idempotent update = new Idempotent();
+        update.setBizId(leaveId);
+        idempotentMapper.update(update,
+                new LambdaQueryWrapper<Idempotent>()
+                        .eq(Idempotent::getRequestId, requestId));
+
+        return leaveId;
+    }
+
+    public Long doCreateLeave(Long currentUserId,LeaveCreateDTO dto){
         UserVO currentUser =
                 userService.getById(currentUserId);
         Long departmentId=currentUser.getDepartmentId();
