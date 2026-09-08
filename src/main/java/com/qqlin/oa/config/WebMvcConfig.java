@@ -21,6 +21,10 @@ private final JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
                 "/departments",
                 "/departments/**",
                 "/leaves",
-                "/leaves/**");
+                "/leaves/**",
+                "/meeting-rooms",
+                "/meeting-rooms/**",
+                "/bookings",
+                "/bookings/**");
     }
 }

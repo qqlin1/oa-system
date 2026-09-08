@@ -19,6 +19,7 @@ import com.qqlin.oa.vo.LeaveVO;
 import com.qqlin.oa.vo.UserVO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public class LeaveService {
         this.idempotentMapper = idempotentMapper;
         this.userService = userService;
     }
+    @Transactional
     public Long createLeave(Long currentUserId, LeaveCreateDTO dto) {
         String requestId = dto.getRequestId();
 

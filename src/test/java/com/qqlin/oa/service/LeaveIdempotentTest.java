@@ -5,6 +5,7 @@ import com.qqlin.oa.dto.LeaveCreateDTO;
 import com.qqlin.oa.entity.Department;
 import com.qqlin.oa.entity.LeaveRequest;
 import com.qqlin.oa.entity.User;
+import com.qqlin.oa.exception.InvalidLeaveRequestException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.UserMapper;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * 请假重复提交（幂等性）测试。
@@ -44,6 +47,7 @@ class LeaveIdempotentTest {
 
     private Long userId;
     private Long departmentId;
+    private Long noDeptUserId;
 
     @BeforeEach
     void setUp() {
@@ -59,6 +63,9 @@ class LeaveIdempotentTest {
                 .eq(LeaveRequest::getApplicantId, userId));
         userMapper.deleteById(userId);
         departmentMapper.deleteById(departmentId);
+        if (noDeptUserId != null) {
+            userMapper.deleteById(noDeptUserId);
+        }
     }
 
     @Test
@@ -104,6 +111,56 @@ class LeaveIdempotentTest {
         user.setName(username);
         user.setPassword(passwordEncoder.encode("test123456"));
         user.setDepartmentId(departmentId);
+        user.setStatus(1);
+        user.setRole("USER");
+        user.setTokenVersion(0);
+        userMapper.insert(user);
+        return user.getId();
+    }
+
+    /**
+     * 验证一个坑：如果「插幂等记录」成功、但后续「创建请假单」失败，
+     * 那条幂等记录会残留下来，把这个 requestId 永久占用 ——
+     * 用户换个条件重新提交，也会被当成「重复请求」，返回 null，永远提交不了。
+     *
+     * 正确行为：创建失败时，幂等记录应当跟着一起撤销（事务回滚）。
+     */
+    @Test
+    @DisplayName("请假单创建失败时，幂等记录不能残留占用这个 requestId")
+    void shouldNotOccupyRequestIdWhenCreateFailed() {
+
+        // 造一个还没分配部门的用户，createLeave 会直接拒绝他
+        noDeptUserId = createUserWithoutDepartment();
+
+        String requestId = UUID.randomUUID().toString();
+
+        LeaveCreateDTO dto = new LeaveCreateDTO();
+        dto.setRequestId(requestId);
+        dto.setLeaveType("ANNUAL");
+        dto.setStartTime(LocalDateTime.now().plusDays(1));
+        dto.setEndTime(LocalDateTime.now().plusDays(2));
+        dto.setReason("幂等测试：这次会失败");
+
+        // 第一次：因为没有部门，业务校验应当拒绝
+        assertThrows(InvalidLeaveRequestException.class, () -> {
+            leaveService.createLeave(noDeptUserId, dto);
+        });
+
+        // 第二次：换成有部门的用户、用同一个 requestId 重新提交
+        // 修复前：幂等记录残留 → 撞唯一键 → 返回 null（永远提交不了）
+        // 修复后：事务回滚，没有残留 → 正常创建成功
+        Long leaveId = leaveService.createLeave(userId, dto);
+
+        assertNotNull(leaveId,
+                "创建失败后这个 requestId 不应当被永久占用，换个用户重新提交应当能成功");
+    }
+
+    private Long createUserWithoutDepartment() {
+        User user = new User();
+        user.setUsername("test_nodept_" + System.nanoTime());
+        user.setName("无部门用户");
+        user.setPassword(passwordEncoder.encode("test123456"));
+        user.setDepartmentId(0L);      // 0 表示没分配部门
         user.setStatus(1);
         user.setRole("USER");
         user.setTokenVersion(0);
