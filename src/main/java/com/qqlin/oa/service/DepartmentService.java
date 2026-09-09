@@ -14,8 +14,11 @@ import com.qqlin.oa.mapper.DepartmentMapper;
 
 import com.qqlin.oa.vo.DepartmentTreeVO;
 import com.qqlin.oa.vo.DepartmentVO;
+import com.qqlin.oa.cache.DepartmentTreeCacheService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 
 import java.util.*;
@@ -24,9 +27,13 @@ import java.util.*;
 public class DepartmentService {
     private final DepartmentMapper departmentMapper;
     private final UserService userService;
-    public DepartmentService(DepartmentMapper departmentMapper, UserService userService) {
+    private final DepartmentTreeCacheService departmentTreeCacheService;
+    public DepartmentService(DepartmentMapper departmentMapper,
+                             UserService userService,
+                             DepartmentTreeCacheService departmentTreeCacheService) {
         this.departmentMapper=departmentMapper;
         this.userService=userService;
+        this.departmentTreeCacheService=departmentTreeCacheService;
     }
     /**
      * 加事务是为了让 validateParentWithLock 拿到的行锁能一直持有到方法结束。
@@ -59,11 +66,31 @@ public class DepartmentService {
 
         departmentMapper.insert(department);
 
+        // 部门数据变了，缓存里的旧树就作废了。
+        // 用 AfterCommit 版本而不是直接 evict()，原因见 evictTreeCacheAfterCommit 的注释。
+        evictTreeCacheAfterCommit();
+
         return  toDepartmentVO(department);
 
     }
+    /**
+     * 查组织架构树。
+     *
+     * 部门数据变动很少（一年可能就改几次），但每次查树都要全表扫描再在内存里组装，
+     * 属于典型的「读多写少」场景，很适合缓存。
+     *
+     * 这里走 Cache Aside：先查 Redis，命中就直接返回；没命中才执行
+     * buildTreeFromDb() 查库，查完写回 Redis。
+     *
+     * 注意权限校验仍然在查缓存之前——不能因为走了缓存就跳过鉴权，
+     * 否则任何人都能拿到组织架构了。
+     */
     public List<DepartmentTreeVO> getDepartmentTree(Long currentUserId){
         userService.requireAdmin(currentUserId);
+        return departmentTreeCacheService.getOrLoad(this::buildTreeFromDb);
+    }
+
+    private List<DepartmentTreeVO> buildTreeFromDb(){
         List<Department> departments=departmentMapper.selectList(
                 new LambdaQueryWrapper<Department>().orderByAsc(
                         Department::getSort
@@ -130,6 +157,7 @@ public class DepartmentService {
         if(affectRows==0){
             throw new DepartmentNotFoundException("部门不存在");
         }
+        evictTreeCacheAfterCommit();
     }
     private void validateParentChange(Long departmentId,Long newParentId){
         List<Department> departments=departmentMapper.selectList(
@@ -238,6 +266,46 @@ public class DepartmentService {
                 throw new DepartmentNotFoundException("部门不存在");
             }
             throw new DepartmentInUseException("该部门下存在子部门或员工，不能删除");
+        }
+
+        evictTreeCacheAfterCommit();
+    }
+
+    /**
+     * 删除部门树缓存——但要等事务提交之后再删。
+     *
+     * 为什么不能直接在这里调 evict()？因为本方法是带 @Transactional 的，
+     * 数据库改动要到方法返回、事务提交那一刻才真正生效。
+     * 如果在事务还没提交的时候就把缓存删了，会有这样一个时序：
+     *
+     *   t1  事务A：更新数据库（还没提交，别人看不见这个改动）
+     *   t2  事务A：删除缓存
+     *   t3  事务B：读数据，发现缓存没有了，于是去查库
+     *            —— 但事务A还没提交，事务B读到的是改动前的旧数据
+     *   t4  事务B：把旧数据写回缓存
+     *   t5  事务A：提交
+     *
+     * 结果是：数据库里是新数据，缓存里是旧数据，而且这个不一致要等缓存
+     * 过期（10 分钟）才会消失。
+     *
+     * 所以正确的做法是注册一个「事务提交之后」的回调，让删缓存发生在提交之后。
+     * 这样事务B再读的时候，事务A已经提交，它读到的一定是新数据。
+     *
+     * 如果当前没有事务在跑（比如 deleteDepartment 就没加 @Transactional），
+     * 那就直接删，没必要注册回调。
+     */
+    private void evictTreeCacheAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            departmentTreeCacheService.evict();
+                        }
+                    }
+            );
+        } else {
+            departmentTreeCacheService.evict();
         }
     }
 

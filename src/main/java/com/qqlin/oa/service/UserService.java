@@ -20,6 +20,7 @@ import com.qqlin.oa.mapper.UserMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -31,12 +32,22 @@ public class UserService {
     private final UserMapper userMapper;
 
     private final JwtTokenService jwtTokenService;
+    private final RateLimitService rateLimitService;
 
-    public UserService(UserMapper userMapper,PasswordEncoder passwordEncoder,JwtTokenService jwtTokenService) {
+    /** 同一个账号在一个统计窗口内最多允许密码错几次 */
+    private static final int MAX_LOGIN_FAILURES = 5;
+    /** 登录失败次数的统计窗口 */
+    private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(1);
+
+    public UserService(UserMapper userMapper,
+                       PasswordEncoder passwordEncoder,
+                       JwtTokenService jwtTokenService,
+                       RateLimitService rateLimitService) {
 
         this.userMapper = userMapper;
         this.passwordEncoder=passwordEncoder;
         this.jwtTokenService=jwtTokenService;
+        this.rateLimitService=rateLimitService;
     }
 
     public UserVO getById(Long id){
@@ -108,6 +119,14 @@ public class UserService {
         return userVO;
     }
     public LoginVO login(UserLoginDTO dto){
+        // 防暴力破解：这个账号在窗口内已经错够多次了，直接挡回去，连数据库都不查。
+        // 放在查库之前很重要——不然攻击者照样能靠疯狂试密码把数据库压垮。
+        String limitKey = "login-fail:" + dto.getUsername();
+        if (rateLimitService.hasExceeded(limitKey, MAX_LOGIN_FAILURES)) {
+            throw new UnauthorizedException(
+                    "密码错误次数过多，请 " + LOGIN_FAIL_WINDOW.toMinutes() + " 分钟后再试");
+        }
+
         User user=userMapper.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getUsername,dto.getUsername())
         );
@@ -116,11 +135,18 @@ public class UserService {
                 dto.getPassword(),
                 user.getPassword())) {
 
+            // 记一次失败。只计数不判断——下一次请求进来时由上面那段判断是否超限
+            rateLimitService.recordFailure(limitKey, LOGIN_FAIL_WINDOW);
             throw new UnauthorizedException("用户名或密码错误");
         }
         if(!Integer.valueOf(1).equals(user.getStatus())){
             throw new UnauthorizedException("用户被禁用");
         }
+
+        // 走到这里说明密码对了。把之前攒下的失败记录清掉——
+        // 正常用户偶尔输错两次不该被算进下一次的限额里
+        rateLimitService.clear(limitKey);
+
         String token=jwtTokenService.generateToken(
                 user.getId(),
                 user.getUsername(),
