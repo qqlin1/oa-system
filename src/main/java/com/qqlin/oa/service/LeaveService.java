@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.LeaveApprovalDTO;
 import com.qqlin.oa.dto.LeaveCreateDTO;
+import com.qqlin.oa.dto.LeaveResultMessage;
 import com.qqlin.oa.entity.Idempotent;
 import com.qqlin.oa.entity.LeaveRequest;
 import com.qqlin.oa.enums.LeaveStatus;
@@ -25,18 +26,23 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 @Service
 public class LeaveService {
     private final LeaveRequestMapper leaveRequestMapper;
     private final IdempotentMapper idempotentMapper;
     private final UserService userService;
+    private final LeaveResultProducer leaveResultProducer;
+
     public LeaveService(LeaveRequestMapper leaveRequestMapper,
                         IdempotentMapper idempotentMapper,
-                        UserService userService) {
+                        UserService userService,
+                        LeaveResultProducer leaveResultProducer) {
         this.leaveRequestMapper = leaveRequestMapper;
         this.idempotentMapper = idempotentMapper;
         this.userService = userService;
+        this.leaveResultProducer = leaveResultProducer;
     }
     @Transactional
     public Long createLeave(Long currentUserId, LeaveCreateDTO dto) {
@@ -185,6 +191,30 @@ public class LeaveService {
         if(affectRows==0){
             throw new InvalidLeaveStatusException("请假状态发生改变，请稍后重试");
         }
+
+        // 顺序很重要：先把审批结果落库，再发消息通知。
+        // 反过来（先发消息）的话，万一落库失败，
+        // 用户会收到一条「审批通过」的通知，但库里其实还是待审批 —— 这就是事故。
+        sendApprovalResultMessage(currentLeave, decision, dto.getApprovalComment().trim());
+    }
+
+    /**
+     * 发审批结果消息，让消费者去生成站内通知。
+     *
+     * 这里故意不处理发送失败：审批本身已经成功了，
+     * 通知发不出去只是体验差一点，不能因为它就把整个审批回滚掉。
+     * 真实项目里会有补偿任务重发，这里先记日志就够了。
+     */
+    private void sendApprovalResultMessage(LeaveRequest leave,
+                                           LeaveStatus decision,
+                                           String comment) {
+        LeaveResultMessage message = new LeaveResultMessage();
+        message.setMsgId(UUID.randomUUID().toString());
+        message.setLeaveId(leave.getId());
+        message.setApplicantId(leave.getApplicantId());
+        message.setStatus(decision.name());
+        message.setComment(comment);
+        leaveResultProducer.send(message);
     }
     public void cancelLeave(Long currentUserId,
                             long leaveId){

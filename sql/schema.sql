@@ -133,4 +133,22 @@ CREATE TABLE IF NOT EXISTS sys_idempotent
   COLLATE = utf8mb4_0900_ai_ci
   COMMENT = '幂等表';
 
+CREATE TABLE IF NOT EXISTS sys_notification
+(
+    id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    user_id     BIGINT      NOT NULL COMMENT '接收通知的用户ID',
+    biz_type    VARCHAR(32) NOT NULL DEFAULT '' COMMENT '业务类型，如 LEAVE',
+    biz_id      BIGINT      NOT NULL COMMENT '关联的业务单号，如请假单ID',
+    content     VARCHAR(500) NOT NULL COMMENT '通知内容',
+    msg_id      VARCHAR(64) NOT NULL COMMENT '消息ID，靠它做消费幂等',
+    create_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_msg_id (msg_id),
+    KEY idx_notification_user_time (user_id, create_time)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '站内通知表';
+
 -- End of schema
