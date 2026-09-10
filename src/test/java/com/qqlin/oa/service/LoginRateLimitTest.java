@@ -166,6 +166,45 @@ class LoginRateLimitTest {
         }
     }
 
+    /**
+     * 这个用例专门防「删窗口外记录」那一步被漏掉。
+     *
+     * 为什么前面那个「窗口过去后恢复」的用例抓不到它：
+     * 如果 key 的过期时间正好等于窗口，key 会自己过期、把整个 ZSet 清掉、
+     * 计数归零 —— 那次通过是 Redis 过期救的，不是滑动窗口起作用。
+     *
+     * 所以这里改成「持续请求」：让 key 一直被刷新、不会过期，
+     * 这样旧记录到底有没有被清理，就藏不住了。
+     */
+    @Test
+    @DisplayName("滑动窗口：窗口滑走后应当持续释放配额，而不是一次性耗尽")
+    void slidingWindowShouldReleaseQuotaAsWindowSlides() throws InterruptedException {
+
+        String key = "sliding-" + System.nanoTime();
+        Duration window = Duration.ofSeconds(1);
+
+        try {
+            int allowed = 0;
+            // 3.2 秒里每 400 毫秒请求一次，共 8 次
+            for (int i = 0; i < 8; i++) {
+                if (rateLimitService.tryAcquireSlidingWindow(key, 2, window)) {
+                    allowed++;
+                }
+                Thread.sleep(400);
+            }
+
+            System.out.println("滑动窗口 3.2 秒内共放行 " + allowed + " 次");
+
+            // 有清理旧记录：窗口会滑走，配额持续释放 —— 放行次数应当明显多于限额 2
+            // 没清理：前 2 次用完就永远不放行 —— 只会有 2 次
+            assertTrue(allowed > 2,
+                    "滑动窗口应当随时间释放配额。只放行 " + allowed
+                            + " 次，说明旧记录没被清掉，已经退化成「总量限制」");
+        } finally {
+            rateLimitService.clear("sliding:" + key);
+        }
+    }
+
     // ---------- 工具方法 ----------
 
     private String limitKey() {

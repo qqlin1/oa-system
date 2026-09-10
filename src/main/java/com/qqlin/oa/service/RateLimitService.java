@@ -89,7 +89,12 @@ public class RateLimitService {
             // ③ 没超就记下这一次（member 用随机 ID，保证同一毫秒来的多个请求不会互相覆盖）
             if (count == null || count < limit) {
                 stringRedisTemplate.opsForZSet().add(key, UUID.randomUUID().toString(), now);
-                stringRedisTemplate.expire(key, window);
+
+                // 过期时间必须比窗口长。
+                // 如果正好等于窗口，key 会自己过期把整个 ZSet 清掉、计数归零 ——
+                // 那实际效果就退化成固定窗口了，上面「删窗口外记录」那步等于白写。
+                // 留成 2 倍，让「清理旧记录」这件事真正由 removeRangeByScore 来做。
+                stringRedisTemplate.expire(key, window.multipliedBy(2));
                 return true;
             }
             return false;
