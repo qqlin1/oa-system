@@ -9,6 +9,7 @@ import com.qqlin.oa.exception.InvalidLeaveStatusException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.TestRoleAssigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,8 @@ class LeaveServiceConcurrencyTest {
     private LeaveRequestMapper leaveRequestMapper;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private TestRoleAssigner roleAssigner;
 
     // 这四个 ID 都是测试自己造出来的，测试结束要删掉
     private Long applicantId;   // 提交请假的人
@@ -274,6 +277,7 @@ class LeaveServiceConcurrencyTest {
         user.setRole(role);
         user.setTokenVersion(0);
         userMapper.insert(user);
+        roleAssigner.assign(user.getId(), role);
         return user.getId();
     }
 

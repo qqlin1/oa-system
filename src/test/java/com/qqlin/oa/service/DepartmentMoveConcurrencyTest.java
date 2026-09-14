@@ -6,6 +6,7 @@ import com.qqlin.oa.entity.User;
 import com.qqlin.oa.exception.InvalidDepartmentHierarchyException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.TestRoleAssigner;
 import com.qqlin.oa.vo.DepartmentTreeVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,7 @@ class DepartmentMoveConcurrencyTest {
     @Autowired private DepartmentMapper departmentMapper;
     @Autowired private UserMapper userMapper;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private TestRoleAssigner roleAssigner;
 
     private Long adminId;
     private Long deptAId;
@@ -181,6 +183,7 @@ class DepartmentMoveConcurrencyTest {
         user.setRole("ADMIN");
         user.setTokenVersion(0);
         userMapper.insert(user);
+        roleAssigner.assign(user.getId(), "ADMIN");
         return user.getId();
     }
 

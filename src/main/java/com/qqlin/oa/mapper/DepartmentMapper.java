@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 @Mapper
 public interface DepartmentMapper extends BaseMapper<Department> {
 
@@ -53,4 +55,26 @@ public interface DepartmentMapper extends BaseMapper<Department> {
      */
     @Select("SELECT id FROM sys_department WHERE id = #{id} FOR UPDATE")
     Long selectIdForUpdate(@Param("id") Long id);
+
+    /**
+     * 查出某个部门自己 + 它下面所有层级的子部门 ID。
+     *
+     * 用 MySQL 8 的递归 CTE（WITH RECURSIVE）在数据库里一次算完，
+     * 而不是把所有部门捞到内存里再遍历 —— 后者在部门量大时会很慢，
+     * 而且每层都要重新扫一遍列表。
+     *
+     * 递归部分从 root 开始，每次找出「父节点已经在结果集里」的下一层，
+     * 直到没有新节点为止。
+     *
+     * 用途：数据权限里的「本部门及以下」——判断一张单据属不属于某个负责人的管辖范围。
+     */
+    @Select("""
+            WITH RECURSIVE dept_tree AS (
+                SELECT id FROM sys_department WHERE id = #{rootId}
+                UNION ALL
+                SELECT d.id FROM sys_department d JOIN dept_tree t ON d.parent_id = t.id
+            )
+            SELECT id FROM dept_tree
+            """)
+    List<Long> selectSelfAndDescendantIds(@Param("rootId") Long rootId);
 }

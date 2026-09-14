@@ -6,6 +6,7 @@ import com.qqlin.oa.entity.Department;
 import com.qqlin.oa.entity.User;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.TestRoleAssigner;
 import com.qqlin.oa.vo.DepartmentTreeVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,8 @@ class DepartmentTreeCacheTest {
     private UserMapper userMapper;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private TestRoleAssigner roleAssigner;
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
@@ -200,6 +203,7 @@ class DepartmentTreeCacheTest {
         user.setRole("ADMIN");
         user.setTokenVersion(0);
         userMapper.insert(user);
+        roleAssigner.assign(user.getId(), "ADMIN");
         return user.getId();
     }
 }

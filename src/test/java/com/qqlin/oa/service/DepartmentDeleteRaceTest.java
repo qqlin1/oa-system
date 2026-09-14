@@ -8,6 +8,7 @@ import com.qqlin.oa.exception.DepartmentInUseException;
 import com.qqlin.oa.exception.DepartmentNotFoundException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.TestRoleAssigner;
 import com.qqlin.oa.vo.DepartmentTreeVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,8 @@ class DepartmentDeleteRaceTest {
     private UserMapper userMapper;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private TestRoleAssigner roleAssigner;
 
     private Long adminId;
     private Long adminDeptId;   // 管理员自己所在的部门，不参与删除，避免干扰
@@ -262,6 +265,7 @@ class DepartmentDeleteRaceTest {
         user.setRole("ADMIN");
         user.setTokenVersion(0);
         userMapper.insert(user);
+        roleAssigner.assign(user.getId(), "ADMIN");
         return user.getId();
     }
 }

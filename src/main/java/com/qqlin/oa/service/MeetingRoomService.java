@@ -1,5 +1,6 @@
 package com.qqlin.oa.service;
 
+import com.qqlin.oa.annotation.RequiresPermission;
 import com.qqlin.oa.dto.MeetingRoomCreateDTO;
 import com.qqlin.oa.entity.MeetingRoom;
 import com.qqlin.oa.exception.MeetingRoomNotFoundException;
@@ -12,18 +13,18 @@ import java.util.List;
 public class MeetingRoomService {
 
     private final MeetingRoomMapper meetingRoomMapper;
-    private final UserService userService;
 
-    public MeetingRoomService(MeetingRoomMapper meetingRoomMapper, UserService userService) {
+    // 这里原来注入过 UserService，用来做 requireAdmin 权限校验。
+    // 改成 @RequiresPermission 注解之后，权限校验交给切面了，这个依赖就不再需要。
+    public MeetingRoomService(MeetingRoomMapper meetingRoomMapper) {
         this.meetingRoomMapper = meetingRoomMapper;
-        this.userService = userService;
     }
 
     /**
      * 创建会议室（仅管理员）。
      */
+    @RequiresPermission("meeting-room:create")
     public Long createMeetingRoom(Long currentUserId, MeetingRoomCreateDTO dto) {
-        userService.requireAdmin(currentUserId);
         MeetingRoom room = new MeetingRoom();
         room.setName(dto.getName().trim());
         room.setCapacity(dto.getCapacity() == null ? 0 : dto.getCapacity());

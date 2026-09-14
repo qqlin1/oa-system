@@ -13,6 +13,7 @@ import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.NotificationMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.TestRoleAssigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,11 +43,13 @@ class LeaveApprovalNotifyTest {
 
     @Autowired private LeaveService leaveService;
     @Autowired private LeaveResultProducer leaveResultProducer;
+    @Autowired private NotificationConsumer notificationConsumer;
     @Autowired private NotificationMapper notificationMapper;
     @Autowired private LeaveRequestMapper leaveRequestMapper;
     @Autowired private UserMapper userMapper;
     @Autowired private DepartmentMapper departmentMapper;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private TestRoleAssigner roleAssigner;
 
     private Long departmentId;
     private Long adminId;
@@ -55,6 +58,11 @@ class LeaveApprovalNotifyTest {
 
     @BeforeEach
     void setUp() {
+        // 先等消费者就绪，再发消息。
+        // 消费者 start() 之后还有一步异步的队列分配，在那之前发的消息要等很久才被拉到，
+        // 不先等的话这个用例会偶发失败（全量跑时更容易撞上）。
+        waitForConsumerReady(20);
+
         // 先清历史残留，再创建本次的数据。
         // 顺序反过来的话，会把本次刚建好的测试用户也一起删掉。
         cleanUpTestNotifications();
@@ -145,7 +153,7 @@ class LeaveApprovalNotifyTest {
         leaveResultProducer.send(message);
         leaveResultProducer.send(message);
 
-        waitForNotificationByMsgId(msgId, 15);
+        waitForNotificationByMsgId(msgId, message, 15);
 
         // 按 msgId 精确统计：就是这个「唯一索引 + 重复投递」的验证点，
         // 不受其他测试残留数据的影响。
@@ -180,16 +188,34 @@ class LeaveApprovalNotifyTest {
                         .eq(Notification::getUserId, userId));
     }
 
-    /** 等到指定 msgId 的通知出现（最多等 maxSeconds 秒） */
-    private void waitForNotificationByMsgId(String msgId, int maxSeconds) {
+    /** 等消费者完成启动（最多等 maxSeconds 秒） */
+    private void waitForConsumerReady(int maxSeconds) {
+        for (int i = 0; i < maxSeconds * 2; i++) {
+            if (notificationConsumer.isReady()) {
+                return;
+            }
+            sleep(500);
+        }
+    }
+
+    /**
+     * 等到指定 msgId 的通知出现（最多等 maxSeconds 秒）。
+     *
+     * 等的过程中每 1 秒补发一次：万一这一条恰好在消费者分配队列之前发出去被漏掉了，
+     * 补发能保证它最终被消费到。补发进来的重复消息本就该被幂等挡掉，不影响「只产生 1 条」这个断言。
+     */
+    private void waitForNotificationByMsgId(String msgId, LeaveResultMessage message, int maxSeconds) {
+        // 每 500 毫秒补发一次，maxSeconds 秒内共有 maxSeconds×2 次机会。
+        // 消费链路是异步的（发 → Broker → 消费者拉取 → 写库），等待要给足余量，否则用例会偶发变红。
         for (int i = 0; i < maxSeconds * 2; i++) {
             long count = notificationMapper.selectCount(
                     new LambdaQueryWrapper<Notification>()
                             .eq(Notification::getMsgId, msgId));
             if (count >= 1) {
-                sleep(500);   // 给重复投递一点时间露出马脚
+                sleep(800);   // 给后面的重复投递一点时间露出马脚
                 return;
             }
+            leaveResultProducer.send(message);
             sleep(500);
         }
     }
@@ -222,6 +248,7 @@ class LeaveApprovalNotifyTest {
         u.setRole(role);
         u.setTokenVersion(0);
         userMapper.insert(u);
+        roleAssigner.assign(u.getId(), role);
         return u.getId();
     }
 }

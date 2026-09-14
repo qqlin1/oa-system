@@ -3,6 +3,8 @@ package com.qqlin.oa.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qqlin.oa.annotation.AuditLog;
+import com.qqlin.oa.annotation.RequiresPermission;
 import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.LeaveApprovalDTO;
 import com.qqlin.oa.dto.LeaveCreateDTO;
@@ -34,15 +36,18 @@ public class LeaveService {
     private final IdempotentMapper idempotentMapper;
     private final UserService userService;
     private final LeaveResultProducer leaveResultProducer;
+    private final DataScopeService dataScopeService;
 
     public LeaveService(LeaveRequestMapper leaveRequestMapper,
                         IdempotentMapper idempotentMapper,
                         UserService userService,
-                        LeaveResultProducer leaveResultProducer) {
+                        LeaveResultProducer leaveResultProducer,
+                        DataScopeService dataScopeService) {
         this.leaveRequestMapper = leaveRequestMapper;
         this.idempotentMapper = idempotentMapper;
         this.userService = userService;
         this.leaveResultProducer = leaveResultProducer;
+        this.dataScopeService = dataScopeService;
     }
     @Transactional
     public Long createLeave(Long currentUserId, LeaveCreateDTO dto) {
@@ -166,14 +171,21 @@ public class LeaveService {
 
         return leaveVO;
     }
+    @AuditLog("审批请假")
+    @RequiresPermission("leave:approve")
     public void approveLeave(Long currentUserId, Long leaveId, LeaveApprovalDTO dto){
-        userService.requireAdmin(currentUserId);
         LeaveRequest currentLeave=leaveRequestMapper.selectById(leaveId);
         if(currentLeave==null){
             throw new LeaveNotFoundException("请假申请不存在");
         }
         if(Objects.equals(currentUserId,currentLeave.getApplicantId())){
             throw new ForbiddenException("不能审批自己提交的请假申请");
+        }
+        // 数据权限：功能上「能审批」还不够，还要看这张单子归不归你管。
+        // 部门经理只能审本部门及下属部门的单子，只有管理员才能审全公司。
+        // 少了这一步，任何一个部门经理都能审任何部门的单子。
+        if(!dataScopeService.canAccessDepartment(currentUserId, currentLeave.getDepartmentId())){
+            throw new ForbiddenException("无权审批该部门的请假申请");
         }
         if(currentLeave.getStatus()!=LeaveStatus.PENDING){
             throw new InvalidLeaveStatusException("当前请假审批已经处理，不能重复审批");
@@ -216,6 +228,7 @@ public class LeaveService {
         message.setComment(comment);
         leaveResultProducer.send(message);
     }
+    @AuditLog("撤销请假")
     public void cancelLeave(Long currentUserId,
                             long leaveId){
         LeaveRequest currentLeave=leaveRequestMapper.selectById(leaveId);
@@ -239,13 +252,27 @@ public class LeaveService {
             throw new InvalidLeaveStatusException("请假申请状态已经发生变化，请刷新后重试");
         }
     }
+    @RequiresPermission("leave:view-pending")
     public PageResult<LeaveVO> getPendingLeaveList(Long currentUserId,
                                                         long current,
                                                         long size){
-        userService.requireAdmin(currentUserId);
         Page<LeaveRequest> leavePage=new Page<>(current,size);
         LambdaQueryWrapper<LeaveRequest> wrapper=new LambdaQueryWrapper<>();
         wrapper.eq(LeaveRequest::getStatus,LeaveStatus.PENDING);
+
+        // 数据权限同样要作用在「列表查询」上，不能只拦单个操作。
+        // 否则部门经理虽然审批不了别人的单子，却能在待办列表里看到全公司的请假，
+        // 信息已经泄露了。
+        // accessibleDepartmentIds 返回 null 表示拥有全部数据权限，不需要加过滤。
+        List<Long> accessibleDeptIds = dataScopeService.accessibleDepartmentIds(currentUserId);
+        if (accessibleDeptIds != null) {
+            if (accessibleDeptIds.isEmpty()) {
+                // 一个部门都管不到（比如「仅本人」权限），直接返回空列表，
+                // 不要走 in () —— 空集合的 in 条件在 SQL 里是非法或恒假的，容易踩坑。
+                return new PageResult<>(new ArrayList<>(), 0, current, size);
+            }
+            wrapper.in(LeaveRequest::getDepartmentId, accessibleDeptIds);
+        }
         wrapper.orderByDesc(LeaveRequest::getCreateTime);
         wrapper.orderByDesc(LeaveRequest::getId);
         leaveRequestMapper.selectPage(leavePage,wrapper);

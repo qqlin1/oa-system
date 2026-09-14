@@ -53,6 +53,15 @@ public class NotificationConsumer {
 
     private DefaultMQPushConsumer consumer;
 
+    /**
+     * 消费者是否已完成启动。
+     *
+     * 注意：start() 返回只代表客户端起来了，背后还有一步「队列分配」（rebalance）是异步的。
+     * 在那之前消息不会流进来。测试如果一上来就发消息、然后干等，可能等不到 —— 表现就是偶发失败。
+     * 所以对外暴露这个标志，让测试能先等就绪再发消息。
+     */
+    private volatile boolean ready = false;
+
     public NotificationConsumer(NotificationMapper notificationMapper) {
         this.notificationMapper = notificationMapper;
     }
@@ -66,6 +75,7 @@ public class NotificationConsumer {
             consumer.subscribe(topic, "*");
             consumer.registerMessageListener((MessageListenerConcurrently) this::consume);
             consumer.start();
+            ready = true;
             log.info("RocketMQ 消费者已启动。topic={}, group={}", topic, consumerGroup);
         } catch (Exception e) {
             // 消费者起不来不应该让整个应用启动失败 —— 通知功能挂了，
@@ -77,9 +87,15 @@ public class NotificationConsumer {
     /** 应用关闭时摘掉消费者 */
     @PreDestroy
     public void stop() {
+        ready = false;
         if (consumer != null) {
             consumer.shutdown();
         }
+    }
+
+    /** 消费者是否已就绪（测试等它，避免偶发的时序失败） */
+    public boolean isReady() {
+        return ready;
     }
 
     private ConsumeConcurrentlyStatus consume(List<MessageExt> msgs,

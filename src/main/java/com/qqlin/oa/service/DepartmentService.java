@@ -2,6 +2,8 @@ package com.qqlin.oa.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
+import com.qqlin.oa.annotation.AuditLog;
+import com.qqlin.oa.annotation.RequiresPermission;
 import com.qqlin.oa.dto.DepartmentCreateDTO;
 import com.qqlin.oa.dto.DepartmentParentUpdateDTO;
 import com.qqlin.oa.entity.Department;
@@ -41,8 +43,8 @@ public class DepartmentService {
      * SELECT ... FOR UPDATE 执行完锁就释放了，等于没锁。
      */
     @Transactional
+    @RequiresPermission("department:create")
     public DepartmentVO createDepartment( Long currentUserId,DepartmentCreateDTO dto){
-        userService.requireAdmin(currentUserId);
         validateLeader(dto.getLeaderId());
         validateParentWithLock(dto.getParentId());
         String departmentName= dto.getName().trim();
@@ -85,8 +87,8 @@ public class DepartmentService {
      * 注意权限校验仍然在查缓存之前——不能因为走了缓存就跳过鉴权，
      * 否则任何人都能拿到组织架构了。
      */
+    @RequiresPermission("department:tree")
     public List<DepartmentTreeVO> getDepartmentTree(Long currentUserId){
-        userService.requireAdmin(currentUserId);
         return departmentTreeCacheService.getOrLoad(this::buildTreeFromDb);
     }
 
@@ -125,10 +127,10 @@ public class DepartmentService {
         return roots;
     }
     @Transactional
+    @RequiresPermission("department:move")
     public void updateParent(Long currentUserId,
                              Long departmentId,
                              DepartmentParentUpdateDTO dto){
-        userService.requireAdmin(currentUserId);
         Department currentDepartment=departmentMapper.selectById(departmentId);
         if(currentDepartment==null){
             throw new DepartmentNotFoundException("部门不存在");
@@ -250,8 +252,9 @@ public class DepartmentService {
         );
         return count>0;
     }
+    @AuditLog("删除部门")
+    @RequiresPermission("department:delete")
     public void deleteDepartment(Long currentUserId, Long departmentId){
-        userService.requireAdmin(currentUserId);
 
         // 「查子部门 → 查员工 → 删除」这三件事合并成一条 SQL 原子完成。
         // 旧写法是三个独立的数据库操作，中间有时间窗：
