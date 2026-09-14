@@ -111,4 +111,23 @@ public class GlobalExceptionHandler {
             return Result.fail(HttpStatus.CONFLICT.value(), e.getMessage());
         }
 
+        @ExceptionHandler(FileNotFoundException.class)
+        @ResponseStatus(HttpStatus.NOT_FOUND)
+        public Result<Void> handlerFileNotFound(FileNotFoundException e){
+            return Result.fail(HttpStatus.NOT_FOUND.value(), e.getMessage());
+        }
+
+        @ExceptionHandler(InvalidFileException.class)
+        @ResponseStatus(HttpStatus.BAD_REQUEST)
+        public Result<Void> handlerInvalidFile(InvalidFileException e){
+            return Result.fail(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
+
+        @ExceptionHandler(FileStorageException.class)
+        @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+        public Result<Void> handlerFileStorage(FileStorageException e){
+            // 磁盘错误不把底层原因暴露给前端（可能含服务器路径），只回一句通用的
+            return Result.fail(HttpStatus.INTERNAL_SERVER_ERROR.value(), "文件存储失败，请稍后重试");
+        }
+
 }

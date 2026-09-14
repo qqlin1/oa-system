@@ -274,7 +274,9 @@ VALUES ('user:list', '查看用户列表', '用户', 10),
        ('meeting-room:list', '查看会议室列表', '会议室', 140),
        ('booking:create', '预订会议室', '会议室', 150),
        ('role:list', '查看角色列表', '权限', 160),
-       ('role:manage', '分配/移除用户角色', '权限', 170)
+       ('role:manage', '分配/移除用户角色', '权限', 170),
+       ('file:upload', '上传附件', '文件', 180),
+       ('file:delete', '删除附件', '文件', 190)
 ON DUPLICATE KEY UPDATE name = VALUES(name),
                         module = VALUES(module),
                         sort = VALUES(sort);
@@ -294,7 +296,8 @@ FROM sys_role r
          JOIN sys_permission p
               ON p.code IN ('leave:create', 'leave:cancel', 'leave:approve', 'leave:view-pending',
                             'department:tree', 'user:view',
-                            'meeting-room:list', 'booking:create')
+                            'meeting-room:list', 'booking:create',
+                            'file:upload', 'file:delete')
 WHERE r.code = 'DEPT_MANAGER'
 ON DUPLICATE KEY UPDATE role_id = role_id;
 
@@ -304,7 +307,8 @@ SELECT r.id, p.id
 FROM sys_role r
          JOIN sys_permission p
               ON p.code IN ('leave:create', 'leave:cancel', 'department:tree', 'user:view',
-                            'meeting-room:list', 'booking:create')
+                            'meeting-room:list', 'booking:create',
+                            'file:upload')
 WHERE r.code = 'USER'
 ON DUPLICATE KEY UPDATE role_id = role_id;
 
@@ -382,5 +386,72 @@ VALUES ('LEAVE', 1, '直属主管审批', 'DEPT_MANAGER'),
        ('LEAVE', 2, '部门负责人审批', 'ADMIN')
 ON DUPLICATE KEY UPDATE name               = VALUES(name),
                         approver_role_code = VALUES(approver_role_code);
+
+-- ============================================================
+-- 文件上传与附件
+--
+-- 为什么分两张表：
+--   同一个文件（比如一份公司制度 PDF）可能被很多人上传。
+--   如果只有一张表、MD5 上加唯一索引，那么第二个人上传时会「秒传」命中第一个人的记录 ——
+--   结果是他看到的文件名、上传人都是别人的。
+--
+--   所以拆成：
+--     sys_file_blob —— 物理文件，按内容 MD5 去重，磁盘上只存一份
+--     sys_file      —— 逻辑文件，每次上传动作一条，记录「谁传的、叫什么名字、挂在哪张单子上」
+--
+--   秒传的本质就是：算出 MD5 → 发现物理文件已存在 → 不再上传，只插一条逻辑记录。
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS sys_file_blob
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    file_md5     CHAR(32)     NOT NULL COMMENT '文件内容的 MD5，物理去重靠它',
+    file_size    BIGINT       NOT NULL COMMENT '文件大小（字节）',
+    content_type VARCHAR(128) NULL COMMENT 'MIME 类型',
+    storage_path VARCHAR(500) NOT NULL COMMENT '相对上传根目录的存储路径',
+    ref_count    INT          NOT NULL DEFAULT 1 COMMENT '被多少条逻辑文件引用',
+    create_time  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_blob_md5 (file_md5)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '文件物理表（按内容去重）';
+
+CREATE TABLE IF NOT EXISTS sys_file
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    blob_id     BIGINT       NOT NULL COMMENT '指向物理文件',
+    file_name   VARCHAR(255) NOT NULL COMMENT '原始文件名（用户看到的名字）',
+    uploader_id BIGINT       NOT NULL COMMENT '上传人ID',
+    biz_type    VARCHAR(32)  NULL COMMENT '关联业务类型，如 LEAVE',
+    biz_id      BIGINT       NULL COMMENT '关联业务ID',
+    create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    PRIMARY KEY (id),
+    KEY idx_file_blob (blob_id),
+    KEY idx_file_biz (biz_type, biz_id),
+    KEY idx_file_uploader (uploader_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '文件逻辑表（每次上传一条）';
+
+CREATE TABLE IF NOT EXISTS sys_file_chunk
+(
+    id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    upload_id   VARCHAR(64) NOT NULL COMMENT '一次分片上传会话的ID',
+    chunk_index INT         NOT NULL COMMENT '分片序号，从 0 开始',
+    chunk_size  INT         NOT NULL COMMENT '这个分片的大小（字节）',
+    create_time DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_chunk_upload_index (upload_id, chunk_index),
+    KEY idx_chunk_upload (upload_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '分片上传记录表';
 
 -- End of schema

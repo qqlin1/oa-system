@@ -37,3 +37,6 @@ src/main/resources/application-local.properties
 
 ### WorkBuddy 工作数据（计划、记忆、临时产物，不进版本库）###
 .workbuddy-ai/
+
+### 文件上传目录（用户上传的附件不该进版本库）###
+uploads/
