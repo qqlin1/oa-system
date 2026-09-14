@@ -16,6 +16,17 @@ public class LeaveRequest {
     private LocalDateTime endTime;
     private String reason;
     private LeaveStatus status;
+    /**
+     * 当前停在第几级审批（从 1 开始）。
+     *
+     * 单级审批时这个字段没什么用；多级审批时它是状态机的核心：
+     * 每通过一级就 +1，加到最后一级之外就表示审批完成。
+     *
+     * 它同时也是并发控制的依据 —— 条件更新时会带上
+     * WHERE current_step = 我读到的那个值，
+     * 这样两个人同时审同一级时，只有一个能改成功。
+     */
+    private Integer currentStep;
     private Long approverId;
     private String approvalComment;
     private LocalDateTime approvalTime;
@@ -86,6 +97,14 @@ public class LeaveRequest {
 
     public void setStatus(LeaveStatus status) {
         this.status = status;
+    }
+
+    public Integer getCurrentStep() {
+        return currentStep;
+    }
+
+    public void setCurrentStep(Integer currentStep) {
+        this.currentStep = currentStep;
     }
 
     public Long getApproverId() {

@@ -15,6 +15,7 @@ import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.RoleMapper;
 import com.qqlin.oa.mapper.UserMapper;
 import com.qqlin.oa.mapper.UserRoleMapper;
+import com.qqlin.oa.support.ApprovalFlowTestSupport;
 import com.qqlin.oa.support.TestRoleAssigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,7 @@ class RoleManageTest {
     @Autowired private LeaveRequestMapper leaveRequestMapper;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private TestRoleAssigner roleAssigner;
+    @Autowired private ApprovalFlowTestSupport approvalFlowTestSupport;
 
     private Long departmentId;
     private Long adminId;
@@ -65,6 +67,9 @@ class RoleManageTest {
 
     @BeforeEach
     void setUp() {
+        // 这个类测的是角色分配，不是「审批几级」。切成单级审批，断言保持原意。
+        approvalFlowTestSupport.useSingleLevelFlow();
+
         String tag = "_" + System.nanoTime();
         departmentId = createDepartment("角色管理测试部门" + tag);
 
@@ -85,6 +90,9 @@ class RoleManageTest {
             userMapper.deleteById(userId);
         }
         departmentMapper.deleteById(departmentId);
+
+        // 还原现场
+        approvalFlowTestSupport.useTwoLevelFlow();
     }
 
     // ---------------------------------------------------------------

@@ -9,7 +9,9 @@ import com.qqlin.oa.common.PageResult;
 import com.qqlin.oa.dto.LeaveApprovalDTO;
 import com.qqlin.oa.dto.LeaveCreateDTO;
 import com.qqlin.oa.dto.LeaveResultMessage;
+import com.qqlin.oa.entity.ApprovalFlow;
 import com.qqlin.oa.entity.Idempotent;
+import com.qqlin.oa.entity.LeaveApproval;
 import com.qqlin.oa.entity.LeaveRequest;
 import com.qqlin.oa.enums.LeaveStatus;
 import com.qqlin.oa.exception.ForbiddenException;
@@ -17,6 +19,7 @@ import com.qqlin.oa.exception.InvalidLeaveRequestException;
 import com.qqlin.oa.exception.InvalidLeaveStatusException;
 import com.qqlin.oa.exception.LeaveNotFoundException;
 import com.qqlin.oa.mapper.IdempotentMapper;
+import com.qqlin.oa.mapper.LeaveApprovalMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.vo.LeaveVO;
 import com.qqlin.oa.vo.UserVO;
@@ -37,17 +40,23 @@ public class LeaveService {
     private final UserService userService;
     private final LeaveResultProducer leaveResultProducer;
     private final DataScopeService dataScopeService;
+    private final ApprovalFlowService approvalFlowService;
+    private final LeaveApprovalMapper leaveApprovalMapper;
 
     public LeaveService(LeaveRequestMapper leaveRequestMapper,
                         IdempotentMapper idempotentMapper,
                         UserService userService,
                         LeaveResultProducer leaveResultProducer,
-                        DataScopeService dataScopeService) {
+                        DataScopeService dataScopeService,
+                        ApprovalFlowService approvalFlowService,
+                        LeaveApprovalMapper leaveApprovalMapper) {
         this.leaveRequestMapper = leaveRequestMapper;
         this.idempotentMapper = idempotentMapper;
         this.userService = userService;
         this.leaveResultProducer = leaveResultProducer;
         this.dataScopeService = dataScopeService;
+        this.approvalFlowService = approvalFlowService;
+        this.leaveApprovalMapper = leaveApprovalMapper;
     }
     @Transactional
     public Long createLeave(Long currentUserId, LeaveCreateDTO dto) {
@@ -171,6 +180,26 @@ public class LeaveService {
 
         return leaveVO;
     }
+    /**
+     * 审批请假 —— 多级审批的状态机。
+     *
+     * 状态怎么流转（以配置的两级为例）：
+     *
+     *   提交后        status=PENDING,  current_step=1
+     *   第 1 级通过   status=PENDING,  current_step=2   ← 注意：状态还是 PENDING
+     *   第 2 级通过   status=APPROVED, current_step=3
+     *
+     *   任何一级拒绝  status=REJECTED（直接结束，后面的级别不用走了）
+     *
+     * 并发怎么控制：条件更新里【必须带上 current_step】。
+     * 两个人同时审同一级时，SQL 是
+     *   UPDATE sys_leave SET current_step=2
+     *   WHERE id=? AND status='PENDING' AND current_step=1
+     * 只有一个人能改成功（影响行数 1），另一个影响行数为 0，直接抛异常。
+     *
+     * 光靠「status 必须是 PENDING」是拦不住的 —— 中间级通过后状态仍然是 PENDING。
+     * 这就是多级审批和单级审批在并发控制上最大的区别。
+     */
     @AuditLog("审批请假")
     @RequiresPermission("leave:approve")
     public void approveLeave(Long currentUserId, Long leaveId, LeaveApprovalDTO dto){
@@ -190,24 +219,75 @@ public class LeaveService {
         if(currentLeave.getStatus()!=LeaveStatus.PENDING){
             throw new InvalidLeaveStatusException("当前请假审批已经处理，不能重复审批");
         }
+
+        // ---------- 多级审批：先算出「现在停在第几级」和「一共几级」 ----------
+        int currentStep = currentLeave.getCurrentStep() == null ? 1 : currentLeave.getCurrentStep();
+        Integer maxStep = approvalFlowService.getMaxStep(ApprovalFlowService.BIZ_TYPE_LEAVE);
+        if (maxStep == null) {
+            // 没配审批链不等于「直接通过」，那是配置缺失，必须报错
+            throw new InvalidLeaveStatusException("请假业务没有配置审批链，请联系管理员");
+        }
+
+        ApprovalFlow node = approvalFlowService.getNode(ApprovalFlowService.BIZ_TYPE_LEAVE, currentStep);
+        if (node == null) {
+            throw new InvalidLeaveStatusException("审批链第 " + currentStep + " 级没有配置，请联系管理员");
+        }
+        // 这一级该谁审：必须拥有该节点要求的角色（管理员可代审任何节点）
+        if (!approvalFlowService.canApprove(currentUserId, node)) {
+            throw new ForbiddenException("第 " + currentStep + " 级是「" + node.getName()
+                    + "」，需要 " + node.getApproverRoleCode() + " 角色");
+        }
+
         LeaveStatus decision=LeaveStatus.valueOf(dto.getDecision());
+        String comment = dto.getApprovalComment().trim();
+        boolean isLastStep = currentStep >= maxStep;
+
         LeaveRequest updateLeave=new LeaveRequest();
-        updateLeave.setStatus(decision);
+        // 无论通过还是拒绝，级数都先推进一格
+        updateLeave.setCurrentStep(currentStep + 1);
         updateLeave.setApproverId(currentUserId);
-        updateLeave.setApprovalComment(dto.getApprovalComment().trim());
+        updateLeave.setApprovalComment(comment);
         updateLeave.setApprovalTime(LocalDateTime.now());
+
+        // 只有走到终点才改 status：
+        //   拒绝           → REJECTED（不管在第几级）
+        //   最后一级通过   → APPROVED
+        //   中间级通过     → 不设置，保持 PENDING（MyBatis-Plus 只更新非 null 字段）
+        if (decision == LeaveStatus.REJECTED) {
+            updateLeave.setStatus(LeaveStatus.REJECTED);
+        } else if (isLastStep) {
+            updateLeave.setStatus(LeaveStatus.APPROVED);
+        }
+
         LambdaUpdateWrapper<LeaveRequest> wrapper=new LambdaUpdateWrapper<>();
         wrapper.eq(LeaveRequest::getId,leaveId);
         wrapper.eq(LeaveRequest::getStatus,LeaveStatus.PENDING);
+        // ★ 关键：把级数也放进条件里，防止同一级被审两次
+        wrapper.eq(LeaveRequest::getCurrentStep, currentStep);
         int affectRows=leaveRequestMapper.update(updateLeave,wrapper);
         if(affectRows==0){
             throw new InvalidLeaveStatusException("请假状态发生改变，请稍后重试");
         }
 
+        // 写审批流水：每一级都要留痕。
+        // 不写流水的话，第 2 级审批会把主表上的第 1 级审批人覆盖掉，历史就查不到了。
+        LeaveApproval approval = new LeaveApproval();
+        approval.setLeaveId(leaveId);
+        approval.setStep(currentStep);
+        approval.setApproverId(currentUserId);
+        approval.setDecision(decision.name());
+        approval.setComment(comment);
+        leaveApprovalMapper.insert(approval);
+
         // 顺序很重要：先把审批结果落库，再发消息通知。
         // 反过来（先发消息）的话，万一落库失败，
         // 用户会收到一条「审批通过」的通知，但库里其实还是待审批 —— 这就是事故。
-        sendApprovalResultMessage(currentLeave, decision, dto.getApprovalComment().trim());
+        //
+        // 只有走到终态才通知：中间级通过就通知的话，
+        // 申请人会看到「已通过」，但单据其实还在流程里，是误导。
+        if (decision == LeaveStatus.REJECTED || isLastStep) {
+            sendApprovalResultMessage(currentLeave, decision, comment);
+        }
     }
 
     /**

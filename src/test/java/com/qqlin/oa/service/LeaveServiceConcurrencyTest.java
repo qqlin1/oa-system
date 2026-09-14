@@ -9,6 +9,7 @@ import com.qqlin.oa.exception.InvalidLeaveStatusException;
 import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.ApprovalFlowTestSupport;
 import com.qqlin.oa.support.TestRoleAssigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,8 @@ class LeaveServiceConcurrencyTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private TestRoleAssigner roleAssigner;
+    @Autowired
+    private ApprovalFlowTestSupport approvalFlowTestSupport;
 
     // 这四个 ID 都是测试自己造出来的，测试结束要删掉
     private Long applicantId;   // 提交请假的人
@@ -55,6 +58,9 @@ class LeaveServiceConcurrencyTest {
      */
     @BeforeEach
     void setUp() {
+        // 这个类测的是并发控制，不是「审批几级」。切成单级审批，断言保持原意。
+        approvalFlowTestSupport.useSingleLevelFlow();
+
         departmentId = createDepartment("并发测试部门_" + System.nanoTime());
         applicantId = createUser("test_applicant_" + System.nanoTime(), "USER", departmentId);
         adminId = createUser("test_admin_" + System.nanoTime(), "ADMIN", departmentId);
@@ -79,6 +85,9 @@ class LeaveServiceConcurrencyTest {
         if (departmentId != null) {
             departmentMapper.deleteById(departmentId);
         }
+
+        // 还原现场
+        approvalFlowTestSupport.useTwoLevelFlow();
     }
 
     @Test

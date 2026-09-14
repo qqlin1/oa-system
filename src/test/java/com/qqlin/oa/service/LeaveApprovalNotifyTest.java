@@ -13,6 +13,7 @@ import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.NotificationMapper;
 import com.qqlin.oa.mapper.UserMapper;
+import com.qqlin.oa.support.ApprovalFlowTestSupport;
 import com.qqlin.oa.support.TestRoleAssigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +51,7 @@ class LeaveApprovalNotifyTest {
     @Autowired private DepartmentMapper departmentMapper;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private TestRoleAssigner roleAssigner;
+    @Autowired private ApprovalFlowTestSupport approvalFlowTestSupport;
 
     private Long departmentId;
     private Long adminId;
@@ -61,6 +63,11 @@ class LeaveApprovalNotifyTest {
         // 先等消费者就绪，再发消息。
         // 消费者 start() 之后还有一步异步的队列分配，在那之前发的消息要等很久才被拉到，
         // 不先等的话这个用例会偶发失败（全量跑时更容易撞上）。
+        // 这个类测的是「审批结果能不能通过 MQ 变成站内通知」，不是「审批几级」。
+        // 必须切成单级审批：两级配置下第一次审批不会走到终态，压根不会发消息，
+        // 那就会和「MQ 没启动」混在一起，分不清到底是哪个原因导致的失败。
+        approvalFlowTestSupport.useSingleLevelFlow();
+
         waitForConsumerReady(20);
 
         // 先清历史残留，再创建本次的数据。
@@ -109,6 +116,9 @@ class LeaveApprovalNotifyTest {
         userMapper.deleteById(adminId);
         userMapper.deleteById(employeeId);
         departmentMapper.deleteById(departmentId);
+
+        // 还原现场
+        approvalFlowTestSupport.useTwoLevelFlow();
     }
 
     @Test

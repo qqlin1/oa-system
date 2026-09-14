@@ -317,4 +317,70 @@ WHERE u.role IS NOT NULL
   AND u.role <> ''
 ON DUPLICATE KEY UPDATE user_id = user_id;
 
+-- ============================================================
+-- U6 多级审批流
+--
+-- 核心思路：把「几级审批、每级谁审」做成【配置】，而不是写死在代码里。
+-- 加一级审批 = 往 sys_approval_flow 插一行，不用改代码、不用发版。
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS sys_approval_flow
+(
+    id                 BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    biz_type           VARCHAR(32) NOT NULL COMMENT '业务类型，如 LEAVE',
+    step               INT         NOT NULL COMMENT '第几级，从 1 开始',
+    name               VARCHAR(64) NOT NULL COMMENT '节点名称，如 直属主管审批',
+    approver_role_code VARCHAR(64) NOT NULL COMMENT '审批人需要具备的角色编码',
+    status             TINYINT     NOT NULL DEFAULT 1 COMMENT '状态：1启用 0停用',
+    create_time        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_flow_biz_step (biz_type, step)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '审批链配置表';
+
+CREATE TABLE IF NOT EXISTS sys_leave_approval
+(
+    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '流水ID',
+    leave_id    BIGINT       NOT NULL COMMENT '请假单ID',
+    step        INT          NOT NULL COMMENT '第几级审批，从 1 开始',
+    approver_id BIGINT       NOT NULL COMMENT '审批人ID',
+    decision    VARCHAR(20)  NOT NULL COMMENT 'APPROVED 同意 / REJECTED 拒绝',
+    comment     VARCHAR(500) NULL COMMENT '审批意见',
+    create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '审批时间',
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_approval_leave_step (leave_id, step),
+    KEY idx_approval_approver (approver_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '请假审批流水表';
+
+-- sys_leave 加 current_step 字段（MySQL 8 不支持 ADD COLUMN IF NOT EXISTS，用 information_schema 判断）
+SET @col_exists = (SELECT COUNT(*)
+                   FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'sys_leave'
+                     AND COLUMN_NAME = 'current_step');
+
+SET @ddl = IF(@col_exists = 0,
+              'ALTER TABLE sys_leave ADD COLUMN current_step INT NOT NULL DEFAULT 1 COMMENT ''当前审批到第几级''',
+              'SELECT 1');
+
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 审批链种子数据：请假走两级
+--   第 1 级：直属主管（DEPT_MANAGER 角色）
+--   第 2 级：部门负责人（ADMIN 角色）
+INSERT INTO sys_approval_flow (biz_type, step, name, approver_role_code)
+VALUES ('LEAVE', 1, '直属主管审批', 'DEPT_MANAGER'),
+       ('LEAVE', 2, '部门负责人审批', 'ADMIN')
+ON DUPLICATE KEY UPDATE name               = VALUES(name),
+                        approver_role_code = VALUES(approver_role_code);
+
 -- End of schema

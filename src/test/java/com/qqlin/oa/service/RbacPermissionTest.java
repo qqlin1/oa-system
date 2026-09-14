@@ -13,6 +13,7 @@ import com.qqlin.oa.mapper.DepartmentMapper;
 import com.qqlin.oa.mapper.LeaveRequestMapper;
 import com.qqlin.oa.mapper.UserMapper;
 import com.qqlin.oa.mapper.UserRoleMapper;
+import com.qqlin.oa.support.ApprovalFlowTestSupport;
 import com.qqlin.oa.support.TestRoleAssigner;
 import com.qqlin.oa.vo.LeaveVO;
 import org.junit.jupiter.api.AfterEach;
@@ -65,6 +66,7 @@ class RbacPermissionTest {
     @Autowired private LeaveRequestMapper leaveRequestMapper;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private TestRoleAssigner roleAssigner;
+    @Autowired private ApprovalFlowTestSupport approvalFlowTestSupport;
 
     private Long deptA;
     private Long deptA1;
@@ -78,6 +80,11 @@ class RbacPermissionTest {
 
     @BeforeEach
     void setUp() {
+        // 这个类测的是权限模型，不是「审批几级」。
+        // 切成单级审批，断言才能保持「审一次就 APPROVED」的原意。
+        // 多级审批由 MultiLevelApprovalTest 专门覆盖。
+        approvalFlowTestSupport.useSingleLevelFlow();
+
         String tag = "_" + System.nanoTime();
         deptA = createDepartment("RBAC部门A" + tag, 0L);
         deptA1 = createDepartment("RBAC子部门A1" + tag, deptA);
@@ -102,6 +109,9 @@ class RbacPermissionTest {
         departmentMapper.deleteById(deptA1);
         departmentMapper.deleteById(deptA);
         departmentMapper.deleteById(deptB);
+
+        // 还原现场，别把两级审批的配置留给后面的测试
+        approvalFlowTestSupport.useTwoLevelFlow();
     }
 
     // ---------------------------------------------------------------
